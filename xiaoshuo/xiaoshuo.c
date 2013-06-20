@@ -14,6 +14,7 @@
 
 int g_url_num = 0;
 char g_urls[10240][32];
+char g_titles[10240][128];
 
 void* memstr(const void* str, size_t n, char* r, size_t rn) {
     unsigned const char* s = str;
@@ -144,9 +145,23 @@ int main(void)
                         printf("%s(%d): don't find \"\n", __FUNCTION__, __LINE__);
                         return -2;
                     }
-                    tmp = cpymem(g_urls[g_url_num++], p2, p3-p2);
+                    tmp = cpymem(g_urls[g_url_num], p2, p3-p2);
                     *tmp++ = '\0';
                     p1 = p3+1;
+
+                    p2 = memstr(p1, pg.cur-p1, "title=\"", sizeof("title=\"")-1);
+                    if (p2) {
+                        p2 += 7;
+                        p3 = memchr(p2, '"', pg.cur-p2);
+                        if (NULL == p3) {
+                            printf("%s(%d): don't find \"\n", __FUNCTION__, __LINE__);
+                            return -2;
+                        }
+                        tmp = cpymem(g_titles[g_url_num], p2, p3-p2);
+                        *tmp++ = '\0';
+                        p1 = p3+1;
+                    }
+                    g_url_num++;
                 }
             } while (p2);
             p1 = memstr(pg.data, pg.cur-pg.data, "class=\"next\">", sizeof("class=\"next\">")-1);
@@ -178,10 +193,18 @@ int main(void)
 			ret = snprintf(path, sizeof(path)-1, ".%s.html", g_urls[i]);
 			path[ret] = '\0';
 			mkdir_r(path);
+            
+            // record href
+            ret = snprintf(tmps, sizeof(tmps)-1, 
+                    "<div class=\"listu\"><a href=\"%s.html\" title=\"%s\">%s</a></div>\n", 
+                    g_urls[i], g_titles[i], g_titles[i]);
+            tmps[ret] = '\0';
+            zjt = cpymem(zjt, tmps, strlen(tmps));
+
 			// already exist, just continue
 			if (0 == access(path, F_OK)) {
 				exist++;
-				continue;
+                continue;
 			}
             pg.cur = pg.data;
             ret = snprintf(page_next, sizeof(page_next)-1, "%s%s?see_lz=1", base_url, g_urls[i]);
@@ -199,10 +222,10 @@ int main(void)
                 printf("%s(%d): code=%d, something is wrong!\n", __FUNCTION__, __LINE__, ret_code);
             }
             // parse content we need
-            p1 = memstr(pg.data, pg.cur-pg.data, "<title>", sizeof("<title>")-1);
+            p1 = memstr(pg.data, pg.cur-pg.data, "\"core_title_txt\" title=\"", sizeof("\"core_title_txt\" title=\"")-1);
             if (p1) {
-                p1 += (sizeof("<title>")-1);
-                p2 = memstr(p1, pg.cur-p1, "</title>", sizeof("</title>")-1);
+                p1 += (sizeof("\"core_title_txt\" title=\"")-1);
+                p2 = memchr(p1, '"', pg.cur-p1);
                 if (p2) {
                     tmp = cpymem(title, p1, p2-p1); *tmp++ = '\0';
                     tmp = chapter;
@@ -219,12 +242,6 @@ int main(void)
                         }
                     } while (p1);
                     *tmp++ = '\0';
-                    // record href
-                    ret = snprintf(tmps, sizeof(tmps)-1, 
-                            "<div class=\"listu\"><a href=\"%s.html\" title=\"%s\">%s</a></div>\n", 
-                            g_urls[i], title, title);
-                    tmps[ret] = '\0';
-                    zjt = cpymem(zjt, tmps, strlen(tmps));
 					// get all, now write static page
 					// printf("%s\n%s\n", title, chapter);
 					f = fopen(neirong, "r");
